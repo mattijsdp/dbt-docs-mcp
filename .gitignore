@@ -29,3 +29,5 @@ MANIFEST
 
 # PyPI configuration file
 .pypirc
+
+**.pyc

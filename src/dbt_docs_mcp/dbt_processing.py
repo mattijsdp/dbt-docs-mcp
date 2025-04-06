@@ -4,10 +4,11 @@ from collections import defaultdict
 import networkx as nx
 from dbt.artifacts.schemas.catalog import CatalogArtifact, CatalogKey
 from dbt.artifacts.schemas.manifest import WritableManifest
+from dbt.artifacts.schemas.resources import ColumnInfo
 from sqlglot import expressions as exp
 from sqlglot import parse_one
 from sqlglot.errors import OptimizeError, SqlglotError
-from sqlglot.lineage import lineage
+from sqlglot.lineage import Node, lineage
 from sqlglot.optimizer.qualify import qualify
 from tqdm import tqdm
 
@@ -27,6 +28,16 @@ def load_catalog(catalog_path: str = CATALOG_PATH):
 
 
 def create_database_schema_table_mapping_from_sql(manifest: WritableManifest, schema: dict = {}) -> dict:
+    """Supplement an existing schema with columns from models that don't have a catalog entry.
+
+    If the schema already contains columns for a model, it will not change it.
+    Args:
+        manifest: A WritableManifest object containing the manifest data.
+        schema: A dictionary mapping from databases to schemas to tables to columns.
+
+    Returns:
+        A dictionary mapping from databases to schemas to tables to columns.
+    """
     for model in tqdm(manifest.nodes.values()):
         if (
             schema.get(model.database.lower(), {}).get(model.schema.lower(), {}).get(model.name.lower(), None)
@@ -66,6 +77,7 @@ def create_database_schema_table_column_mapping(manifest: WritableManifest, cata
     """Returns a nested dictionary mapping from databases to schemas to tables to columns, for both nodes and sources.
 
     Args:
+        manifest: A WritableManifest object containing the manifest data.
         catalog: A CatalogArtifact object containing the catalog data.
 
     Returns:
@@ -76,12 +88,10 @@ def create_database_schema_table_column_mapping(manifest: WritableManifest, cata
     # Process both nodes and sources which have the same structure
     for collection in [catalog.nodes, catalog.sources]:
         for _, table in collection.items():
-            # Get database, schema, and table name from metadata
-            database = table.metadata.database.lower() or ""  # Handle None case
+            database = table.metadata.database.lower() or ""
             schema = table.metadata.schema.lower()
             table_name = table.metadata.name.lower()
 
-            # Initialize nested dictionaries if they don't exist
             if database not in result:
                 result[database] = defaultdict(dict)
             if schema not in result[database]:
@@ -96,7 +106,15 @@ def create_database_schema_table_column_mapping(manifest: WritableManifest, cata
     return result
 
 
-def get_parent_nodes_from_lineage_node(node) -> list:
+def get_parent_nodes_from_lineage_node(node: Node) -> list[Node]:
+    """Get the parent nodes from a lineage node.
+
+    Args:
+        node: A lineage node.
+
+    Returns:
+        A list of parent nodes.
+    """
     parent_nodes = []
     for int_node in node.walk():
         if isinstance(int_node.source, exp.Table):
@@ -105,6 +123,17 @@ def get_parent_nodes_from_lineage_node(node) -> list:
 
 
 def get_column_lineage(column_name: str, sql: str, schema: dict, dialect: str = DIALECT) -> list[dict]:
+    """Get the lineage of a column.
+
+    Args:
+        column_name: The name of the column.
+        sql: The SQL code of the model.
+        schema: The schema of the model.
+        dialect: The dialect of the SQL code.
+
+    Returns:
+        A list of parent nodes with their column_name and database_fqn.
+    """
     lineage_node = lineage(column_name, sql=sql, schema=schema, dialect=dialect)
     parent_nodes = get_parent_nodes_from_lineage_node(lineage_node)
     column_lineage = []
@@ -144,10 +173,19 @@ def get_column_lineage_for_manifest(
     return manifest_column_lineage
 
 
-def get_dbt_graph(manifest: WritableManifest):
+def get_dbt_graph(manifest: WritableManifest, schema: dict) -> nx.DiGraph:
+    """Get the dbt graph from a manifest.
+
+    The graph includes nodes, sources and exposures.
+    """
     G = nx.DiGraph()
     nodes, edges = [], []
-    for k, v in {**manifest.nodes, **manifest.sources}.items():
+    for k, v in {**manifest.nodes, **manifest.sources, **manifest.exposures}.items():
+        if v.resource_type != "exposure":
+            v.columns = {
+                column_name: ColumnInfo(name=column_name, data_type=data_type)
+                for column_name, data_type in schema[v.database.lower()][v.schema.lower()][v.alias.lower()].items()
+            }
         nodes.append((k, vars(v)))
         depends_on_nodes = getattr(getattr(v, "depends_on", {}), "nodes", [])
         edges.extend((d, k) for d in depends_on_nodes)
@@ -156,8 +194,12 @@ def get_dbt_graph(manifest: WritableManifest):
     return G
 
 
-def get_column_lineage_graph(manifest_column_lineage, node_map, source_map):
-    G_cll = nx.DiGraph()
+def get_column_lineage_graph(manifest_column_lineage, node_map, source_map) -> nx.DiGraph:
+    """Get the column lineage graph from a manifest and a node map and source map.
+
+    Edges represent whether a column depends on another column.
+    """
+    G_col = nx.DiGraph()
     nodes, edges = [], []
     for model_unique_id, table_column_lineage in manifest_column_lineage.items():
         for column_name, column_lineage in table_column_lineage.items():
@@ -176,6 +218,6 @@ def get_column_lineage_graph(manifest_column_lineage, node_map, source_map):
                 parent_dbt_unique_id = node_map.get(parent_catalog_key) or list(source_map.get(parent_catalog_key))[0]
                 parent_unique_id = f"{parent_dbt_unique_id}.{parent_column['column_name']}"
                 edges += [(parent_unique_id, column_unique_id)]
-    G_cll.add_nodes_from(nodes)
-    G_cll.add_edges_from(edges)
-    return G_cll
+    G_col.add_nodes_from(nodes)
+    G_col.add_edges_from(edges)
+    return G_col
