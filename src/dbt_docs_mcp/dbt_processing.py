@@ -2,9 +2,9 @@ import warnings
 from collections import defaultdict
 
 import networkx as nx
+from dbt.artifacts.resources import ColumnInfo
 from dbt.artifacts.schemas.catalog import CatalogArtifact, CatalogKey
 from dbt.artifacts.schemas.manifest import WritableManifest
-from dbt.artifacts.schemas.resources import ColumnInfo
 from sqlglot import expressions as exp
 from sqlglot import parse_one
 from sqlglot.errors import OptimizeError, SqlglotError

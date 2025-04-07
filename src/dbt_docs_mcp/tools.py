@@ -1,8 +1,12 @@
 from typing import Callable, Iterable
 
 import networkx as nx
+from dbt.task.docs.generate import get_unique_id_mapping
 from rapidfuzz.distance import DamerauLevenshtein
 from rapidfuzz.process import extract
+
+from dbt_docs_mcp.dbt_processing import get_column_lineage_graph, get_dbt_graph, load_manifest
+from dbt_docs_mcp.utils import read_json
 
 SCORER = DamerauLevenshtein.normalized_similarity
 SCORE_CUTOFF = 0.1
@@ -31,7 +35,7 @@ RELEVENT_ATTRIBUTES = {
 
 def get_useful_attributes(dbt_unique_id: str, G: nx.DiGraph):
     attributes = G.nodes[dbt_unique_id]
-    # Return everything is resource_type not one of the main ones
+    # Return everything if resource_type not one of the main ones
     if attributes["resource_type"] not in RELEVENT_ATTRIBUTES:
         return attributes
     return {key: attributes[key] for key in RELEVENT_ATTRIBUTES[attributes["resource_type"]]}
@@ -235,16 +239,27 @@ def get_dbt_sql_search_tool(G: nx.DiGraph):
     return search_dbt_sql_code
 
 
-def get_dbt_tools(G: nx.DiGraph, G_col: nx.DiGraph = None) -> list[Callable]:
-    """Get all tools for working with the DBT graph.
+def get_dbt_tools(manifest_path: str, schema_mapping_path: str, manifest_cl_path: str) -> list[Callable]:
+    """Get all tools for working with the DBT graphs.
 
     Args:
-        G (nx.DiGraph): The node-level DBT graph
-        G_col (nx.DiGraph): The column-level DBT graph
+        manifest_path (str): The path to the manifest file
+        schema_mapping_path (str): The path to the schema mapping file
+        manifest_cl_path (str): The path to the manifest column lineage file
 
     Returns:
         list: List of tool functions for working with DBT data
     """
+    manifest = load_manifest(manifest_path)
+    schema_mapping = read_json(schema_mapping_path)
+    manifest_column_lineage = read_json(manifest_cl_path)
+    node_map, source_map = get_unique_id_mapping(manifest)
+
+    G = get_dbt_graph(manifest=manifest, schema=schema_mapping)
+    G_col = get_column_lineage_graph(
+        manifest_column_lineage=manifest_column_lineage, node_map=node_map, source_map=source_map
+    )
+
     tools = [
         get_dbt_predecessor_tool(G=G),
         get_dbt_successor_tool(G=G),
