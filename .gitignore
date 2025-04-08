@@ -31,3 +31,5 @@ MANIFEST
 .pypirc
 
 **.pyc
+
+_version.py
