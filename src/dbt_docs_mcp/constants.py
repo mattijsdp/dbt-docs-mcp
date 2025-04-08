@@ -6,3 +6,5 @@ SCHEMA_MAPPING_PATH = config("SCHEMA_MAPPING_PATH", default="outputs/schema_mapp
 MANIFEST_CL_PATH = config("MANIFEST_CL_PATH", default="outputs/manifest_column_lineage.json")
 
 DIALECT = config("DIALECT", default="snowflake")
+
+UNKNOWN = "UNKNOWN"

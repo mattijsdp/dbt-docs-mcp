@@ -1,9 +1,7 @@
 import warnings
 from collections import defaultdict
 
-import networkx as nx
-from dbt.artifacts.resources import ColumnInfo
-from dbt.artifacts.schemas.catalog import CatalogArtifact, CatalogKey
+from dbt.artifacts.schemas.catalog import CatalogArtifact
 from dbt.artifacts.schemas.manifest import WritableManifest
 from sqlglot import expressions as exp
 from sqlglot import parse_one
@@ -12,19 +10,7 @@ from sqlglot.lineage import Node, lineage
 from sqlglot.optimizer.qualify import qualify
 from tqdm import tqdm
 
-from dbt_docs_mcp.constants import CATALOG_PATH, DIALECT, MANIFEST_PATH
-
-UNKNOWN = "UNKNOWN"
-
-
-def load_manifest(manifest_path: str = MANIFEST_PATH):
-    manifest = WritableManifest.read(manifest_path)
-    return manifest
-
-
-def load_catalog(catalog_path: str = CATALOG_PATH):
-    catalog = CatalogArtifact.read(catalog_path)
-    return catalog
+from dbt_docs_mcp.constants import DIALECT, UNKNOWN
 
 
 def create_database_schema_table_mapping_from_sql(manifest: WritableManifest, schema: dict = {}) -> dict:
@@ -171,53 +157,3 @@ def get_column_lineage_for_manifest(
         table_column_lineage = get_column_lineage_for_model(model, schema, dialect)
         manifest_column_lineage[model_unique_id] = table_column_lineage
     return manifest_column_lineage
-
-
-def get_dbt_graph(manifest: WritableManifest, schema: dict) -> nx.DiGraph:
-    """Get the dbt graph from a manifest.
-
-    The graph includes nodes, sources and exposures.
-    """
-    G = nx.DiGraph()
-    nodes, edges = [], []
-    for k, v in {**manifest.nodes, **manifest.sources, **manifest.exposures}.items():
-        if v.resource_type != "exposure":
-            v.columns = {
-                column_name: ColumnInfo(name=column_name, data_type=data_type)
-                for column_name, data_type in schema[v.database.lower()][v.schema.lower()][v.alias.lower()].items()
-            }
-        nodes.append((k, vars(v)))
-        depends_on_nodes = getattr(getattr(v, "depends_on", {}), "nodes", [])
-        edges.extend((d, k) for d in depends_on_nodes)
-    G.add_nodes_from(nodes)
-    G.add_edges_from(edges)
-    return G
-
-
-def get_column_lineage_graph(manifest_column_lineage, node_map, source_map) -> nx.DiGraph:
-    """Get the column lineage graph from a manifest and a node map and source map.
-
-    Edges represent whether a column depends on another column.
-    """
-    G_col = nx.DiGraph()
-    nodes, edges = [], []
-    for model_unique_id, table_column_lineage in manifest_column_lineage.items():
-        for column_name, column_lineage in table_column_lineage.items():
-            column_unique_id = f"{model_unique_id}.{column_name}"
-            nodes.append((column_unique_id, {}))
-            for parent_column in column_lineage:
-                if parent_column["database_fqn"] == UNKNOWN:
-                    continue
-                parent_catalog_key = CatalogKey(*parent_column["database_fqn"].split("."))
-                if parent_catalog_key not in node_map and parent_catalog_key not in source_map:
-                    warnings.warn(
-                        f"Model {model_unique_id} has a column {column_name} with a parent "
-                        f"{parent_column['database_fqn']} that is not in the node_map or source_map"
-                    )
-                    continue
-                parent_dbt_unique_id = node_map.get(parent_catalog_key) or list(source_map.get(parent_catalog_key))[0]
-                parent_unique_id = f"{parent_dbt_unique_id}.{parent_column['column_name']}"
-                edges += [(parent_unique_id, column_unique_id)]
-    G_col.add_nodes_from(nodes)
-    G_col.add_edges_from(edges)
-    return G_col

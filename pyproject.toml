@@ -6,7 +6,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "dbt-core==1.8",
-    "mcp>=1.6.0",
+    "mcp[cli]>=1.6.0",
     "networkx>=3.4.2",
     "python-decouple>=3.8",
     "rapidfuzz>=3.12.2",

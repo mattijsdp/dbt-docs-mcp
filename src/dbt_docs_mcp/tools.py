@@ -5,8 +5,8 @@ from dbt.task.docs.generate import get_unique_id_mapping
 from rapidfuzz.distance import DamerauLevenshtein
 from rapidfuzz.process import extract
 
-from dbt_docs_mcp.dbt_processing import get_column_lineage_graph, get_dbt_graph, load_manifest
-from dbt_docs_mcp.utils import read_json
+from dbt_docs_mcp.dbt_graphs import get_column_lineage_graph, get_dbt_graph
+from dbt_docs_mcp.utils import load_manifest, read_json
 
 SCORER = DamerauLevenshtein.normalized_similarity
 SCORE_CUTOFF = 0.1
@@ -190,7 +190,7 @@ def get_dbt_node_search_tool(G: nx.DiGraph):
 
 
 def get_dbt_column_search_tool(G: nx.DiGraph):
-    column_names = {node_name: column for node_name, node in G.nodes.items() for column in node["columns"]}
+    column_names = {node_name: column for node_name, node in G.nodes.items() for column in node.get("columns", [])}
 
     def search_dbt_column_names(search_string: str, first_n: int = 10):
         """Search for nodes containing columns matching a name pattern. Returns a list of dbt unique ids.
@@ -218,7 +218,7 @@ def get_dbt_column_search_tool(G: nx.DiGraph):
 
 
 def get_dbt_sql_search_tool(G: nx.DiGraph):
-    compiled_code = {node_name: node["compiled_code"] for node_name, node in list(G.nodes.items())}
+    compiled_code = {node_name: node.get("compiled_code", "") for node_name, node in list(G.nodes.items())}
 
     def search_dbt_sql_code(search_string: str, first_n: int = 10):
         """Search for nodes containing a string in their SQL code. Returns a list of dbt unique ids.
