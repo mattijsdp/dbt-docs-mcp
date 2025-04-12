@@ -1,31 +1,42 @@
 from typing import Callable, Iterable
 
 import networkx as nx
-from dbt.task.docs.generate import get_unique_id_mapping
-from rapidfuzz.distance import DamerauLevenshtein
+from rapidfuzz.fuzz import partial_ratio
 from rapidfuzz.process import extract
 
-from dbt_docs_mcp.dbt_graphs import get_column_lineage_graph, get_dbt_graph
-from dbt_docs_mcp.utils import load_manifest, read_json
-
-SCORER = DamerauLevenshtein.normalized_similarity
-SCORE_CUTOFF = 0.1
+SCORER = partial_ratio  # no preprocessing is applied e.g. whitespace trimming or case normalization
+SCORE_CUTOFF = 70
 
 NODE_RELEVANT_ATTRIBUTES = [
     "description",
-    "columns",
+    "database",
+    "schema",
+    "alias",
     "relation_name",
     "resource_type",
     "path",
     "unique_id",
     "tags",
     "metrics",
+    "depends_on",
+    "columns",
     "compiled_code",
 ]
 RELEVENT_ATTRIBUTES = {
     "model": NODE_RELEVANT_ATTRIBUTES,
-    "source": ["description", "columns", "relation_name", "resource_type", "path", "unique_id", "tags"],
-    "exposure": ["description", "resource_type", "type", "owner", "path", "unique_id", "tags", "metrics"],
+    "source": [
+        "description",
+        "database",
+        "schema",
+        "identifier",
+        "relation_name",
+        "resource_type",
+        "path",
+        "unique_id",
+        "tags",
+        "columns",
+    ],
+    "exposure": ["description", "resource_type", "type", "owner", "path", "unique_id", "tags", "metrics", "depends_on"],
     "test": NODE_RELEVANT_ATTRIBUTES,
     "seed": NODE_RELEVANT_ATTRIBUTES,
     "operation": NODE_RELEVANT_ATTRIBUTES,
@@ -53,12 +64,7 @@ def get_dbt_node_attributes_tool(G: nx.DiGraph):
             dbt_unique_id (str): The dbt unique id of the node to get attributes for
 
         Returns:
-            dict: Dictionary containing model attributes:
-                - description: Model description
-                - depends_on: List of models this model depends on
-                - columns: Dictionary of column names and their descriptions
-                - compiled_code: The compiled SQL code for the model
-
+            dict: Dictionary containing relevant attributes of the node
         """
         return get_useful_attributes(dbt_unique_id, G)
 
@@ -77,7 +83,6 @@ def get_dbt_predecessor_tool(G: nx.DiGraph):
 
         Returns:
             list: List of dbt unique ids. To get their attributes, use the get_dbt_node_attributes tool.
-
         """
         predecessor_nodes = list(G.predecessors(dbt_unique_id))
         return predecessor_nodes
@@ -97,7 +102,6 @@ def get_dbt_successor_tool(G: nx.DiGraph):
 
         Returns:
             list: List of dbt unique ids. To get their attributes, use the get_dbt_node_attributes tool.
-
         """
         successor_nodes = list(G.successors(dbt_unique_id))
         return successor_nodes
@@ -127,7 +131,6 @@ def get_column_ancestors_tool(G: nx.DiGraph, G_col: nx.DiGraph):
 
         Returns:
             dict: mapping of ancestor column keys in format {dbt_unique_id.column_name} to that model's attributes
-
         """
         ancestor_columns = nx.ancestors(G_col, f"{dbt_unique_id}.{column_name}")
         return get_dbt_node_attributes_from_columns(ancestor_columns, G)
@@ -149,7 +152,6 @@ def get_column_descendants_tool(G: nx.DiGraph, G_col: nx.DiGraph):
 
         Returns:
             dict: mapping of ancestor column keys in format {dbt_unique_id.column_name} to that model's attributes
-
         """
         descendant_columns = nx.descendants(G_col, f"{dbt_unique_id}.{column_name}")
         return get_dbt_node_attributes_from_columns(descendant_columns, G)
@@ -162,7 +164,7 @@ def model_names_from_matches(matches: list[tuple[str, float, str]]):
 
 
 def get_dbt_node_search_tool(G: nx.DiGraph):
-    dbt_unique_ids = list(G.nodes.keys())
+    dbt_unique_ids = {node: node for node in list(G.nodes.keys())}
 
     def search_dbt_node_names(search_string: str, first_n: int = 10):
         """Search for dbt nodes by name. Returns a list of dbt unique ids.
@@ -174,7 +176,6 @@ def get_dbt_node_search_tool(G: nx.DiGraph):
 
         Returns:
             list: List of dbt unique ids. To get their attributes, use the get_dbt_node_attributes tool.
-
         """
         matches = extract(
             search_string,
@@ -239,7 +240,7 @@ def get_dbt_sql_search_tool(G: nx.DiGraph):
     return search_dbt_sql_code
 
 
-def get_dbt_tools(manifest_path: str, schema_mapping_path: str, manifest_cl_path: str) -> list[Callable]:
+def get_dbt_tools(G: nx.DiGraph, G_col: nx.DiGraph = None) -> list[Callable]:
     """Get all tools for working with the DBT graphs.
 
     Args:
@@ -250,16 +251,6 @@ def get_dbt_tools(manifest_path: str, schema_mapping_path: str, manifest_cl_path
     Returns:
         list: List of tool functions for working with DBT data
     """
-    manifest = load_manifest(manifest_path)
-    schema_mapping = read_json(schema_mapping_path)
-    manifest_column_lineage = read_json(manifest_cl_path)
-    node_map, source_map = get_unique_id_mapping(manifest)
-
-    G = get_dbt_graph(manifest=manifest, schema=schema_mapping)
-    G_col = get_column_lineage_graph(
-        manifest_column_lineage=manifest_column_lineage, node_map=node_map, source_map=source_map
-    )
-
     tools = [
         get_dbt_predecessor_tool(G=G),
         get_dbt_successor_tool(G=G),

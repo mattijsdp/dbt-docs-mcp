@@ -33,3 +33,5 @@ MANIFEST
 **.pyc
 
 _version.py
+
+.env

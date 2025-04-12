@@ -1,5 +1,6 @@
 import warnings
 from collections import defaultdict
+from pathlib import Path
 
 from dbt.artifacts.schemas.catalog import CatalogArtifact
 from dbt.artifacts.schemas.manifest import WritableManifest
@@ -11,6 +12,7 @@ from sqlglot.optimizer.qualify import qualify
 from tqdm import tqdm
 
 from dbt_docs_mcp.constants import DIALECT, UNKNOWN
+from dbt_docs_mcp.utils import read_json, write_json
 
 
 def create_database_schema_table_mapping_from_sql(manifest: WritableManifest, schema: dict = {}) -> dict:
@@ -157,3 +159,41 @@ def get_column_lineage_for_manifest(
         table_column_lineage = get_column_lineage_for_model(model, schema, dialect)
         manifest_column_lineage[model_unique_id] = table_column_lineage
     return manifest_column_lineage
+
+
+def read_or_write_schema_mapping(
+    manifest: WritableManifest, catalog: CatalogArtifact, schema_mapping_path: str, overwrite: bool = False
+) -> dict:
+    # Ensure output directories exist
+    Path(schema_mapping_path).parent.mkdir(parents=True, exist_ok=True)
+
+    if Path(schema_mapping_path).exists() and not overwrite:
+        schema_mapping = read_json(schema_mapping_path)
+    else:
+        # Create database schema table column mapping
+        print("Creating database schema table column mapping...")
+        schema_mapping = create_database_schema_table_column_mapping(manifest, catalog)
+
+        print(f"Saving results to {schema_mapping_path}...")
+        write_json(schema_mapping, schema_mapping_path)
+
+    return schema_mapping
+
+
+def read_or_write_manifest_column_lineage(
+    manifest: WritableManifest, schema_mapping: dict, manifest_cl_path: str, overwrite: bool = False
+) -> dict:
+    # Ensure output directories exist
+    Path(manifest_cl_path).parent.mkdir(parents=True, exist_ok=True)
+
+    if Path(manifest_cl_path).exists() and not overwrite:
+        manifest_cl = read_json(manifest_cl_path)
+    else:
+        # Generate column-level lineage for the entire manifest
+        print("Generating column-level lineage...")
+        manifest_cl = get_column_lineage_for_manifest(manifest=manifest, schema=schema_mapping, dialect=DIALECT)
+
+        print(f"Saving results to {manifest_cl_path}...")
+        write_json(manifest_cl, manifest_cl_path)
+
+    return manifest_cl

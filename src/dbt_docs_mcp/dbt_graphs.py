@@ -4,8 +4,10 @@ import networkx as nx
 from dbt.artifacts.resources import ColumnInfo
 from dbt.artifacts.schemas.catalog import CatalogKey
 from dbt.artifacts.schemas.manifest import WritableManifest
+from dbt.task.docs.generate import get_unique_id_mapping
 
 from dbt_docs_mcp.constants import UNKNOWN
+from dbt_docs_mcp.utils import load_manifest, read_json
 
 
 def get_dbt_graph(manifest: WritableManifest, schema: dict) -> nx.DiGraph:
@@ -65,3 +67,24 @@ def get_column_lineage_graph(manifest_column_lineage, node_map, source_map) -> n
     G_col.add_nodes_from(nodes)
     G_col.add_edges_from(edges)
     return G_col
+
+
+def get_G_and_G_col(
+    manifest_path: str,
+    schema_mapping_path: str,
+    manifest_cl_path: str,
+) -> tuple[nx.DiGraph, nx.DiGraph]:
+    manifest = load_manifest(manifest_path)
+    schema_mapping = read_json(schema_mapping_path)
+    G = get_dbt_graph(manifest=manifest, schema=schema_mapping)
+
+    if manifest_cl_path:
+        manifest_column_lineage = read_json(manifest_cl_path)
+        node_map, source_map = get_unique_id_mapping(manifest)
+        G_col = get_column_lineage_graph(
+            manifest_column_lineage=manifest_column_lineage, node_map=node_map, source_map=source_map
+        )
+    else:
+        G_col = None
+
+    return G, G_col

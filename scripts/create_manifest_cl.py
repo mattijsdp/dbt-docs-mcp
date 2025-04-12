@@ -7,18 +7,15 @@ from pathlib import Path
 
 from dbt_docs_mcp.constants import (
     CATALOG_PATH,
-    DIALECT,
     MANIFEST_CL_PATH,
     MANIFEST_PATH,
     SCHEMA_MAPPING_PATH,
 )
 from dbt_docs_mcp.dbt_processing import (
-    create_database_schema_table_column_mapping,
-    get_column_lineage_for_manifest,
-    load_catalog,
-    load_manifest,
+    read_or_write_manifest_column_lineage,
+    read_or_write_schema_mapping,
 )
-from dbt_docs_mcp.utils import read_json, write_json
+from dbt_docs_mcp.utils import load_catalog, load_manifest
 
 
 def parse_args():
@@ -50,6 +47,11 @@ def parse_args():
         default=MANIFEST_CL_PATH,
         help="Path where to save the manifest column lineage JSON",
     )
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Overwrite the existing manifest column lineage JSON",
+    )
     return parser.parse_args()
 
 
@@ -64,31 +66,13 @@ def main():
             "These are files dbt creates."
             "Please see [link](https://docs.getdbt.com/reference/artifacts/dbt-artifacts) for more information."
         )
-
-    # Ensure output directories exist
-    Path(args.schema_mapping_path).parent.mkdir(parents=True, exist_ok=True)
-    Path(args.manifest_cl_path).parent.mkdir(parents=True, exist_ok=True)
-
-    # Load manifest and catalog
-    print("Loading manifest and catalog...")
+    print(args.overwrite)
     manifest = load_manifest(args.manifest_path)
     catalog = load_catalog(args.catalog_path)
 
-    # Load existing schema mapping if it exists
-    if Path(args.schema_mapping_path).exists():
-        schema_mapping = read_json(args.schema_mapping_path)
-    else:
-        # Create database schema table column mapping
-        print("Creating database schema table column mapping...")
-        schema_mapping = create_database_schema_table_column_mapping(manifest, catalog)
-        write_json(schema_mapping, args.schema_mapping_path)
+    schema_mapping = read_or_write_schema_mapping(manifest, catalog, args.schema_mapping_path, args.overwrite)
 
-    # Generate column-level lineage for the entire manifest
-    print("Generating column-level lineage...")
-    manifest_cll = get_column_lineage_for_manifest(manifest=manifest, schema=schema_mapping, dialect=DIALECT)
-
-    print(f"Saving results to {args.manifest_cl_path}...")
-    write_json(manifest_cll, args.manifest_cl_path)
+    _ = read_or_write_manifest_column_lineage(manifest, schema_mapping, args.manifest_cl_path, args.overwrite)
 
     print("Done!")
 
