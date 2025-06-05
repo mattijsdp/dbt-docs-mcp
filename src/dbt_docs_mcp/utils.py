@@ -17,9 +17,15 @@ def read_json(file_path):
 
 
 def load_manifest(manifest_path: str = MANIFEST_PATH):
-    manifest = WritableManifest.read(manifest_path)
+    # Read the manifest JSON first
+    with open(manifest_path, "r") as f:
+        manifest_json = json.load(f)
+    # Patch missing 'unit_tests' field if necessary
+    if "unit_tests" not in manifest_json:
+        manifest_json["unit_tests"] = {}
+    # Use WritableManifest.from_dict instead of .read
+    manifest = WritableManifest.from_dict(manifest_json)
     return manifest
-
 
 def load_catalog(catalog_path: str = CATALOG_PATH):
     catalog = CatalogArtifact.read(catalog_path)
