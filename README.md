@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/mattijsdp-dbt-docs-mcp-badge.png)](https://mseep.ai/app/mattijsdp-dbt-docs-mcp)
+
 # dbt-docs-mcp
 
 Model Context Protocol (MCP) server for interacting with dbt project metadata, including dbt Docs artifacts (`manifest.json`, `catalog.json`). This server exposes dbt graph information and allows querying node details, model/column lineage, and related metadata.
