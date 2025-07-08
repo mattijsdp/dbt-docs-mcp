@@ -1,3 +1,5 @@
+[![Verified on MseeP](https://mseep.ai/badge.svg)](https://mseep.ai/app/ad4aaf73-63ce-42e0-b27c-8541ae1fbab8)
+
 # dbt-docs-mcp
 
 Model Context Protocol (MCP) server for interacting with dbt project metadata, including dbt Docs artifacts (`manifest.json`, `catalog.json`). This server exposes dbt graph information and allows querying node details, model/column lineage, and related metadata.
@@ -42,7 +44,7 @@ This server provides tools to:
     ```
     - Depending on your dbt project size, creating column-lineage can take a while (hours)
 4.  **Run the Server:**
-    - If your desired MCP client (Claude desktop, Cursor, etc.) supports mcp.json it would like as below:
+    - If your desired MCP client (Claude desktop, Cursor, etc.) supports mcp.json it would look as below:
     ```json
     {
         "mcpServers": {
