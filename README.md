@@ -69,3 +69,7 @@ This server provides tools to:
         }
     }
     ```
+## Hosted deployment
+
+A hosted deployment is available on [Fronteir AI](https://fronteir.ai/mcp/mattijsdp-dbt-docs-mcp).
+
